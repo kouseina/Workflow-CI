@@ -1,9 +1,15 @@
 name: MLflow Project CI - Retrain
 
 on:
-  workflow_dispatch:
   push:
     branches: ["main"]
+
+  workflow_dispatch:
+    inputs:
+      level:
+        description: "basic | skilled | advance"
+        required: true
+        default: "basic"
 
 jobs:
   retrain:
@@ -23,32 +29,39 @@ jobs:
           python -m pip install --upgrade pip
           pip install mlflow==2.19.0 pandas numpy scikit-learn==1.5.2 joblib
 
+      # ===== BASIC: retrain via MLflow Project =====
       - name: Run MLflow Project (local env)
         working-directory: MLProject
         run: |
           mlflow run . --env-manager=local -e main
 
+      # ===== SKILLED: store artifacts (downloadable from Actions) =====
       - name: Upload artifacts
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.level != 'basic' }}
         uses: actions/upload-artifact@v4
         with:
           name: house-prices-artifacts
           path: MLProject/artifacts/
 
+      # ===== ADVANCE: build & push Docker image to Docker Hub =====
       - name: Docker Hub Login
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.level == 'advance' }}
         run: |
           echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Build Docker image
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.level == 'advance' }}
         working-directory: MLProject
         run: |
+          # get latest run id created by mlflow projects
           RUN_ID="$(ls -1 mlruns/0 | head -n 1)"
+          echo "Using RUN_ID=$RUN_ID"
+
           mlflow models build-docker \
             -m "runs:/$RUN_ID/model" \
             -n "${{ secrets.DOCKERHUB_USERNAME }}/house-prices-mlflow:latest"
 
       - name: Push Docker image
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.level == 'advance' }}
         run: |
           docker push "${{ secrets.DOCKERHUB_USERNAME }}/house-prices-mlflow:latest"
