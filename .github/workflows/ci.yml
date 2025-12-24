@@ -3,7 +3,7 @@ name: MLflow Project CI - Retrain
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   retrain:
@@ -23,37 +23,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install mlflow==2.19.0 pandas numpy scikit-learn==1.5.2 joblib
 
-      - name: Run MLflow Project
+      - name: Run MLflow Project (local env)
         working-directory: MLProject
         run: |
-          mlflow run . -e main
+          mlflow run . --env-manager=local -e main
 
-      - name: Upload artifacts (model + metrics)
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: house-prices-artifacts
           path: MLProject/artifacts/
 
-      - name: Commit artifacts to repo (skilled)
-        if: github.ref == 'refs/heads/main'
+      - name: Docker Hub Login
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git checkout -b artifacts || git checkout artifacts
-          mkdir -p saved_artifacts
-          cp -r MLProject/artifacts/* saved_artifacts/ || true
-          git add saved_artifacts
-          git commit -m "Update trained artifacts" || echo "No changes"
-          git push origin artifacts || git push origin HEAD:artifacts
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-      - name: Login Docker Hub (advance)
-        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-
-      - name: Build Docker image with MLflow (advance)
+      - name: Build Docker image
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
         working-directory: MLProject
         run: |
-          mlflow build-docker -m . -n ${{ secrets.DOCKERHUB_USERNAME }}/house-prices-mlflow:latest
+          RUN_ID="$(ls -1 mlruns/0 | head -n 1)"
+          mlflow models build-docker \
+            -m "runs:/$RUN_ID/model" \
+            -n "${{ secrets.DOCKERHUB_USERNAME }}/house-prices-mlflow:latest"
 
-      - name: Push Docker image (advance)
+      - name: Push Docker image
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
         run: |
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/house-prices-mlflow:latest
+          docker push "${{ secrets.DOCKERHUB_USERNAME }}/house-prices-mlflow:latest"
