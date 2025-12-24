@@ -1,0 +1,59 @@
+name: MLflow Project CI - Retrain
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mlflow==2.19.0 pandas numpy scikit-learn==1.5.2 joblib
+
+      - name: Run MLflow Project
+        working-directory: MLProject
+        run: |
+          mlflow run . -e main
+
+      - name: Upload artifacts (model + metrics)
+        uses: actions/upload-artifact@v4
+        with:
+          name: house-prices-artifacts
+          path: MLProject/artifacts/
+
+      - name: Commit artifacts to repo (skilled)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git checkout -b artifacts || git checkout artifacts
+          mkdir -p saved_artifacts
+          cp -r MLProject/artifacts/* saved_artifacts/ || true
+          git add saved_artifacts
+          git commit -m "Update trained artifacts" || echo "No changes"
+          git push origin artifacts || git push origin HEAD:artifacts
+
+      - name: Login Docker Hub (advance)
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Build Docker image with MLflow (advance)
+        working-directory: MLProject
+        run: |
+          mlflow build-docker -m . -n ${{ secrets.DOCKERHUB_USERNAME }}/house-prices-mlflow:latest
+
+      - name: Push Docker image (advance)
+        run: |
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/house-prices-mlflow:latest

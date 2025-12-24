@@ -1,0 +1,9 @@
+name: house-prices-ci
+
+entry_points:
+  main:
+    parameters:
+      data_dir: {type: str, default: "house_prices_preprocessing"}
+      n_estimators: {type: int, default: 200}
+      random_state: {type: int, default: 42}
+    command: "python modelling.py --data_dir {data_dir} --n_estimators {n_estimators} --random_state {random_state}"

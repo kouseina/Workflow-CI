@@ -1,0 +1,26 @@
+# Python environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# MLflow local tracking
+mlruns/
+mlflow.db
+
+# Local artifacts & models
+artifacts/
+*.joblib
+*.pkl
+
+# Docker / build cache
+.docker/
+*.tar
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
